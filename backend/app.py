@@ -5,8 +5,9 @@ import os
 from pathlib import Path
 import uuid
 from routes.documents import router as documents_router
+from routes.search import router as search_router
 
-app = FastAPI(title="Document Research Assistant", version="0.1.0")
+app = FastAPI(title="Document Research Assistant", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,10 +21,11 @@ UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 app.include_router(documents_router, prefix="/api")
+app.include_router(search_router, prefix="/api")
 
 @app.get("/")
 async def root():
-    return {"message": "Document Research Assistant API", "version": "0.1.0"}
+    return {"message": "Document Research Assistant API", "version": "0.2.0"}
 
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):

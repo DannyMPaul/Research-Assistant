@@ -11,10 +11,29 @@
         <header class="text-center mb-8">
             <h1 class="text-3xl font-bold text-gray-900 mb-2">Document Research Assistant</h1>
             <p class="text-gray-600">Upload documents and extract insights</p>
-            <div class="text-sm text-gray-500 mt-2">Version 0.1.0 - Base Infrastructure</div>
+            <div class="text-sm text-gray-500 mt-2">Version 0.2.0 - Text Processing & Search</div>
         </header>
 
         <div class="space-y-8">
+            <!-- Search Section -->
+            <div class="w-full max-w-2xl mx-auto">
+                <div class="flex space-x-2">
+                    <input 
+                        type="text" 
+                        id="search-input" 
+                        placeholder="Search across all documents..." 
+                        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                    <button 
+                        onclick="performSearch()" 
+                        class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500"
+                    >
+                        Search
+                    </button>
+                </div>
+                <div id="search-results" class="mt-4 hidden"></div>
+            </div>
+
             <!-- Upload Section -->
             <div class="w-full max-w-md mx-auto">
                 <div id="upload-area" class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center transition-colors hover:border-blue-500 hover:bg-blue-50">
@@ -134,8 +153,11 @@
                                     <h3 class="font-medium text-gray-900">${doc.filename}</h3>
                                     <p class="text-sm text-gray-500">${formatFileSize(doc.size)}</p>
                                 </div>
-                                <button onclick="viewText('${doc.file_id}')" class="text-blue-600 hover:text-blue-800 text-sm">
+                                <button onclick="viewText('${doc.file_id}')" class="text-blue-600 hover:text-blue-800 text-sm mr-2">
                                     View Text
+                                </button>
+                                <button onclick="searchInDocument('${doc.file_id}')" class="text-green-600 hover:text-green-800 text-sm">
+                                    Search
                                 </button>
                             </div>
                         </div>
@@ -178,6 +200,96 @@
         }
         
         // Load documents on page load
+        loadDocuments();
+        const searchInput = document.getElementById('search-input');
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+        
+        async function performSearch() {
+            const query = searchInput.value.trim();
+            const resultsDiv = document.getElementById('search-results');
+            
+            if (!query) {
+                resultsDiv.classList.add('hidden');
+                return;
+            }
+            
+            resultsDiv.innerHTML = '<div class="text-gray-500">Searching...</div>';
+            resultsDiv.classList.remove('hidden');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                if (data.documents.length === 0) {
+                    resultsDiv.innerHTML = '<div class="text-gray-500">No results found</div>';
+                } else {
+                    resultsDiv.innerHTML = `
+                        <div class="bg-white border rounded-lg p-4">
+                            <h3 class="font-semibold mb-3">Search Results (${data.total_documents} documents)</h3>
+                            ${data.documents.map(doc => `
+                                <div class="mb-4 last:mb-0">
+                                    <h4 class="font-medium text-blue-600">${doc.filename}</h4>
+                                    <p class="text-sm text-gray-600">${doc.matches} matches found</p>
+                                    ${doc.results.map(result => `
+                                        <div class="mt-2 p-2 bg-gray-50 rounded text-sm">
+                                            <span class="text-gray-700">${highlightText(result.context, result.highlight_start, result.highlight_end)}</span>
+                                        </div>
+                                    `).join('')}
+                                    ${doc.matches > 3 ? `<p class="text-xs text-gray-500 mt-1">...and ${doc.matches - 3} more matches</p>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = '<div class="text-red-500">Search error occurred</div>';
+            }
+        }
+        
+        function highlightText(text, start, end) {
+            return text.substring(0, start) + 
+                   '<mark class="bg-yellow-200">' + text.substring(start, end) + '</mark>' + 
+                   text.substring(end);
+        }
+        
+        async function searchInDocument(fileId) {
+            const query = prompt('Enter search term:');
+            if (!query) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/document/${fileId}/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                const modal = document.createElement('div');
+                modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50';
+                modal.innerHTML = `
+                    <div class="bg-white rounded-lg max-w-4xl max-h-96 overflow-auto p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">Search Results in ${data.filename}</h3>
+                            <button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700">✕</button>
+                        </div>
+                        <div class="mb-4">
+                            <p class="text-sm text-gray-600">Query: "${data.query}" • ${data.total_matches} matches found</p>
+                        </div>
+                        <div class="space-y-3">
+                            ${data.results.map((result, index) => `
+                                <div class="p-3 bg-gray-50 rounded">
+                                    <div class="text-xs text-gray-500 mb-1">Match ${index + 1}</div>
+                                    <div class="text-sm">${highlightText(result.context, result.highlight_start, result.highlight_end)}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            } catch (error) {
+                alert('Search error occurred');
+            }
+        }
         loadDocuments();
     </script>
 </body>
