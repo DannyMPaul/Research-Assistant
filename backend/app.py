@@ -6,8 +6,9 @@ from pathlib import Path
 import uuid
 from routes.documents import router as documents_router
 from routes.search import router as search_router
+from routes.vector_search import router as vector_search_router
 
-app = FastAPI(title="Document Research Assistant", version="0.2.0")
+app = FastAPI(title="Document Research Assistant", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,10 +23,11 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 app.include_router(documents_router, prefix="/api")
 app.include_router(search_router, prefix="/api")
+app.include_router(vector_search_router, prefix="/api")
 
 @app.get("/")
 async def root():
-    return {"message": "Document Research Assistant API", "version": "0.2.0"}
+    return {"message": "Document Research Assistant API", "version": "0.3.0"}
 
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
@@ -61,4 +63,4 @@ async def list_documents():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8002)

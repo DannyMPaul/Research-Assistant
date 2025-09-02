@@ -11,25 +11,35 @@
         <header class="text-center mb-8">
             <h1 class="text-3xl font-bold text-gray-900 mb-2">Document Research Assistant</h1>
             <p class="text-gray-600">Upload documents and extract insights</p>
-            <div class="text-sm text-gray-500 mt-2">Version 0.2.0 - Text Processing & Search</div>
+            <div class="text-sm text-gray-500 mt-2">Version 0.3.0 - Vector Embeddings & Semantic Search</div>
         </header>
 
         <div class="space-y-8">
             <!-- Search Section -->
             <div class="w-full max-w-2xl mx-auto">
-                <div class="flex space-x-2">
-                    <input 
-                        type="text" 
-                        id="search-input" 
-                        placeholder="Search across all documents..." 
-                        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                    <button 
-                        onclick="performSearch()" 
-                        class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500"
-                    >
-                        Search
-                    </button>
+                <div class="mb-4">
+                    <div class="flex space-x-2 mb-2">
+                        <button id="keyword-search-btn" onclick="setSearchMode('keyword')" class="px-4 py-2 bg-blue-600 text-white rounded-lg">
+                            Keyword Search
+                        </button>
+                        <button id="semantic-search-btn" onclick="setSearchMode('semantic')" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">
+                            AI Semantic Search
+                        </button>
+                    </div>
+                    <div class="flex space-x-2">
+                        <input 
+                            type="text" 
+                            id="search-input" 
+                            placeholder="Search across all documents..." 
+                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                        <button 
+                            onclick="performSearch()" 
+                            class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500"
+                        >
+                            Search
+                        </button>
+                    </div>
                 </div>
                 <div id="search-results" class="mt-4 hidden"></div>
             </div>
@@ -59,7 +69,26 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:8000';
+        const API_BASE = 'http://localhost:8002';
+        let currentSearchMode = 'keyword'; // 'keyword' or 'semantic'
+        
+        // Search mode switching
+        function setSearchMode(mode) {
+            currentSearchMode = mode;
+            const keywordBtn = document.getElementById('keyword-search-btn');
+            const semanticBtn = document.getElementById('semantic-search-btn');
+            const searchInput = document.getElementById('search-input');
+            
+            if (mode === 'keyword') {
+                keywordBtn.className = 'px-4 py-2 bg-blue-600 text-white rounded-lg';
+                semanticBtn.className = 'px-4 py-2 bg-gray-300 text-gray-700 rounded-lg';
+                searchInput.placeholder = 'Search for exact keywords...';
+            } else {
+                keywordBtn.className = 'px-4 py-2 bg-gray-300 text-gray-700 rounded-lg';
+                semanticBtn.className = 'px-4 py-2 bg-purple-600 text-white rounded-lg';
+                searchInput.placeholder = 'Describe what you\'re looking for...';
+            }
+        }
         
         // File upload handling
         const fileInput = document.getElementById('file-input');
@@ -156,6 +185,9 @@
                                 <button onclick="viewText('${doc.file_id}')" class="text-blue-600 hover:text-blue-800 text-sm mr-2">
                                     View Text
                                 </button>
+                                <button onclick="embedDocument('${doc.file_id}')" class="text-purple-600 hover:text-purple-800 text-sm mr-2">
+                                    Embed
+                                </button>
                                 <button onclick="searchInDocument('${doc.file_id}')" class="text-green-600 hover:text-green-800 text-sm">
                                     Search
                                 </button>
@@ -221,32 +253,78 @@
             resultsDiv.classList.remove('hidden');
             
             try {
-                const response = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(query)}`);
+                let endpoint;
+                if (currentSearchMode === 'semantic') {
+                    endpoint = `${API_BASE}/api/search/semantic?q=${encodeURIComponent(query)}`;
+                } else {
+                    endpoint = `${API_BASE}/api/search?q=${encodeURIComponent(query)}`;
+                }
+                
+                const response = await fetch(endpoint);
                 const data = await response.json();
                 
-                if (data.documents.length === 0) {
-                    resultsDiv.innerHTML = '<div class="text-gray-500">No results found</div>';
+                if (currentSearchMode === 'semantic') {
+                    displaySemanticResults(data);
                 } else {
-                    resultsDiv.innerHTML = `
-                        <div class="bg-white border rounded-lg p-4">
-                            <h3 class="font-semibold mb-3">Search Results (${data.total_documents} documents)</h3>
-                            ${data.documents.map(doc => `
-                                <div class="mb-4 last:mb-0">
-                                    <h4 class="font-medium text-blue-600">${doc.filename}</h4>
-                                    <p class="text-sm text-gray-600">${doc.matches} matches found</p>
-                                    ${doc.results.map(result => `
-                                        <div class="mt-2 p-2 bg-gray-50 rounded text-sm">
-                                            <span class="text-gray-700">${highlightText(result.context, result.highlight_start, result.highlight_end)}</span>
-                                        </div>
-                                    `).join('')}
-                                    ${doc.matches > 3 ? `<p class="text-xs text-gray-500 mt-1">...and ${doc.matches - 3} more matches</p>` : ''}
-                                </div>
-                            `).join('')}
-                        </div>
-                    `;
+                    displayKeywordResults(data);
                 }
             } catch (error) {
                 resultsDiv.innerHTML = '<div class="text-red-500">Search error occurred</div>';
+            }
+        }
+        
+        function displaySemanticResults(data) {
+            const resultsDiv = document.getElementById('search-results');
+            
+            if (data.results.length === 0) {
+                resultsDiv.innerHTML = '<div class="text-gray-500">No semantic matches found</div>';
+            } else {
+                resultsDiv.innerHTML = `
+                    <div class="bg-white border rounded-lg p-4">
+                        <h3 class="font-semibold mb-3">🔍 Semantic Search Results (${data.total_results} matches)</h3>
+                        <div class="space-y-3">
+                            ${data.results.map(result => `
+                                <div class="border-l-4 border-purple-500 pl-4">
+                                    <div class="flex justify-between items-start mb-2">
+                                        <h4 class="font-medium text-purple-600">${result.filename}</h4>
+                                        <span class="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                                            ${(result.similarity_score * 100).toFixed(1)}% match
+                                        </span>
+                                    </div>
+                                    <div class="text-sm text-gray-700 bg-gray-50 p-3 rounded">
+                                        ${result.chunk_text.length > 300 ? result.chunk_text.substring(0, 300) + '...' : result.chunk_text}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        function displayKeywordResults(data) {
+            const resultsDiv = document.getElementById('search-results');
+            
+            if (data.documents.length === 0) {
+                resultsDiv.innerHTML = '<div class="text-gray-500">No keyword matches found</div>';
+            } else {
+                resultsDiv.innerHTML = `
+                    <div class="bg-white border rounded-lg p-4">
+                        <h3 class="font-semibold mb-3">📝 Keyword Search Results (${data.total_documents} documents)</h3>
+                        ${data.documents.map(doc => `
+                            <div class="mb-4 last:mb-0">
+                                <h4 class="font-medium text-blue-600">${doc.filename}</h4>
+                                <p class="text-sm text-gray-600">${doc.matches} matches found</p>
+                                ${doc.results.map(result => `
+                                    <div class="mt-2 p-2 bg-gray-50 rounded text-sm">
+                                        <span class="text-gray-700">${highlightText(result.context, result.highlight_start, result.highlight_end)}</span>
+                                    </div>
+                                `).join('')}
+                                ${doc.matches > 3 ? `<p class="text-xs text-gray-500 mt-1">...and ${doc.matches - 3} more matches</p>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
             }
         }
         
@@ -290,6 +368,24 @@
                 alert('Search error occurred');
             }
         }
+        
+        async function embedDocument(fileId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/document/${fileId}/embed`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert(`✅ Document embedded successfully!\n${data.chunks_created} chunks created for AI search.`);
+                } else {
+                    alert(`ℹ️ ${data.message || 'Document already embedded'}`);
+                }
+            } catch (error) {
+                alert('❌ Error embedding document: ' + error.message);
+            }
+        }
+        
         loadDocuments();
     </script>
 </body>
