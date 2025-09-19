@@ -19,16 +19,11 @@ class VectorStore:
     def __init__(self, model_name="all-MiniLM-L6-v2"):
         # Always enable semantic search (use text-based similarity if embeddings unavailable)
         self.enabled = True
-        self.use_embeddings = EMBEDDINGS_AVAILABLE
-        
-        if EMBEDDINGS_AVAILABLE:
-            try:
-                self.model = SentenceTransformer(model_name)
-                self.dimension = 384  # MiniLM embedding size
-                self.index = faiss.IndexFlatIP(self.dimension)  # Inner Product for cosine similarity
-            except Exception as e:
-                print(f"Error initializing embeddings: {e}")
-                self.use_embeddings = False
+        self.use_embeddings = False  # Start with False, try to initialize later
+        self.model_name = model_name
+        self.model = None
+        self.index = None
+        self.dimension = 384  # MiniLM embedding size
         
         self.documents = []
         self.chunks = []
@@ -36,13 +31,39 @@ class VectorStore:
         self.vector_store_path = Path("vector_store")
         self.vector_store_path.mkdir(exist_ok=True)
         
-        if self.use_embeddings:
-            self.load_existing_store()
+        if not hasattr(self, 'embeddings_initialized'):
+            self.embeddings_initialized = False
+        
+        # Always load existing store for text search
+        self.load_existing_store()
+
+    def _initialize_embeddings(self):
+        """Lazy initialization of embeddings model."""
+        if not EMBEDDINGS_AVAILABLE or self.embeddings_initialized:
+            return
+        
+        try:
+            print("Initializing sentence transformers model...")
+            self.model = SentenceTransformer(self.model_name)
+            self.dimension = 384  # MiniLM embedding size
+            self.index = faiss.IndexFlatIP(self.dimension)  # Inner Product for cosine similarity
+            self.use_embeddings = True
+            self.embeddings_initialized = True
+            print("Embeddings initialized successfully!")
+        except Exception as e:
+            print(f"Failed to initialize embeddings: {e}")
+            print("Falling back to text-based search only.")
+            self.use_embeddings = False
+            self.embeddings_initialized = True  # Mark as attempted
     
     def add_document(self, file_id, filename, text):
         chunks = self._chunk_text(text)
         
-        if self.use_embeddings:
+        # Try to initialize embeddings if not already done
+        if not self.embeddings_initialized:
+            self._initialize_embeddings()
+        
+        if self.use_embeddings and self.model:
             try:
                 embeddings = self.model.encode(chunks)
                 faiss.normalize_L2(embeddings)
@@ -78,7 +99,11 @@ class VectorStore:
         if not self.metadata:
             return []
         
-        if self.use_embeddings and hasattr(self, 'index') and self.index.ntotal > 0:
+        # Try to initialize embeddings if not already done
+        if not self.embeddings_initialized:
+            self._initialize_embeddings()
+        
+        if self.use_embeddings and self.model and hasattr(self, 'index') and self.index and self.index.ntotal > 0:
             try:
                 query_embedding = self.model.encode([query])
                 faiss.normalize_L2(query_embedding)
