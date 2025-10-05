@@ -1,50 +1,19 @@
 # Document Research Assistant
 
-A modern web application for uploading documents and extracting insights using AI-powered analysis.
+AI-powered document analysis platform with intelligent Q&A capabilities using Large Language Models.
 
-## Version 0.1.0 - Base Infrastructure
-
-This is the foundational version with core document upload and management functionality.
+## Version 4.1.0 - Enhanced User Experience
 
 ### Features
 
-- Upload PDF, DOCX, and TXT documents
-- Document storage and listing
-- Clean, responsive web interface
-- RESTful API backend
-
-### Tech Stack
-
-- **Backend**: FastAPI, Python 3.11
-- **Frontend**: React, Vite, Tailwind CSS
-- **Deployment**: Docker & Docker Compose
+- **AI Chat**: Ask questions about your documents with contextual answers
+- **Smart Search**: Keyword, semantic, and AI-enhanced search modes
+- **Document Support**: PDF, DOCX, TXT with automatic processing
+- **Query History**: Auto-saved search suggestions
+- **Export**: Save conversations as markdown
+- **Keyboard Shortcuts**: Full navigation support
 
 ## Quick Start
-
-### Development Setup
-
-1. **Clone and navigate to project**
-
-```bash
-git clone <your-repo>
-cd Research_Assistant
-```
-
-2. **Start with Docker Compose**
-
-```bash
-docker-compose up --build
-```
-
-3. **Access the application**
-
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-
-### Manual Setup
-
-#### Backend
 
 ```bash
 cd backend
@@ -52,48 +21,26 @@ pip install -r requirements.txt
 python app.py
 ```
 
-#### Frontend
+Access at http://localhost:8002
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+## Usage
 
-## API Endpoints
+1. **Upload**: Drag documents to "Manage Documents" → "Process for AI"
+2. **Search**: Use different search modes in "Search Documents"
+3. **Chat**: Ask questions in "AI Chat" tab
+4. **Shortcuts**: Ctrl+1/2/3 for tabs, Ctrl+K for search, ? for help
 
-- `GET /` - API status
-- `POST /upload` - Upload document
-- `GET /documents` - List uploaded documents
-- `GET /api/document/{file_id}/text` - Extract text from document
+## Tech Stack
 
-## Project Structure
+- **Backend**: FastAPI, Python 3.11+
+- **AI**: Llama-3.2-1B-Instruct, sentence-transformers, FAISS
+- **Frontend**: Vanilla JS, Tailwind CSS
 
-```
-Research_Assistant/
-├── backend/                 # FastAPI backend
-│   ├── app.py              # Main application
-│   ├── routes/             # API route handlers
-│   ├── utils/              # Utility functions
-│   └── requirements.txt    # Python dependencies
-├── frontend/               # React frontend
-│   ├── src/
-│   │   ├── components/     # React components
-│   │   └── App.jsx        # Main app component
-│   └── package.json       # Node dependencies
-└── docker-compose.yml     # Container orchestration
-```
+## Requirements
 
-## Upcoming Features (Roadmap)
-
-- **v0.2.0**: Text chunking and basic search
-- **v0.3.0**: Vector embeddings and similarity search
-- **v0.4.0**: AI-powered Q&A with Llama 4 Scout
-- **v0.5.0**: Enhanced UI and error handling
-
-## Contributing
-
-This project follows semantic versioning. Each feature increment will be tagged as a new version for easy tracking.
+- Python 3.11+
+- 8GB+ GPU (recommended) or CPU fallback
+- 4GB+ RAM
 
 ## License
 

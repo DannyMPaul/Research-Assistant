@@ -105,6 +105,8 @@
             padding: 12px;
             border-radius: 12px;
             max-width: 80%;
+            position: relative;
+            group: hover;
         }
 
         .message.user {
@@ -118,6 +120,33 @@
             background-color: #f3f4f6;
             color: #1f2937;
             margin-right: auto;
+        }
+
+        .message-actions {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            display: none;
+            background: rgba(0,0,0,0.1);
+            border-radius: 4px;
+            padding: 2px;
+        }
+
+        .message:hover .message-actions {
+            display: flex;
+        }
+
+        .keyboard-shortcuts {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            display: none;
+            z-index: 1000;
         }
 
         body.dark-mode .message.assistant {
@@ -187,13 +216,20 @@
                         </button>
                     </div>
                     <div class="flex space-x-2">
-                        <input 
-                            type="text" 
-                            id="search-input" 
-                            placeholder="Search across all documents..." 
-                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            onkeypress="handleSearchEnter(event)"
-                        >
+                        <div class="relative flex-1">
+                            <input 
+                                type="text" 
+                                id="search-input" 
+                                placeholder="Search across all documents..." 
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                onkeypress="handleSearchEnter(event)"
+                                oninput="showSearchHistory()"
+                                onfocus="showSearchHistory()"
+                                onblur="hideSearchHistory()"
+                            >
+                            <div id="search-history" class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 hidden max-h-40 overflow-y-auto">
+                            </div>
+                        </div>
                         <button 
                             onclick="performSearch()" 
                             class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500"
@@ -217,6 +253,9 @@
                         </button>
                         <button onclick="loadConversations()" class="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700">
                             History
+                        </button>
+                        <button onclick="exportChat()" class="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
+                            Export
                         </button>
                     </div>
                 </div>
@@ -283,6 +322,8 @@
         let currentSearchMode = 'keyword';
         let currentConversationId = null;
         let chatEnabled = false;
+        let searchHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+        let editingMessageId = null;
         
         // Dark Mode Functions
         function toggleDarkMode() {
@@ -308,6 +349,48 @@
                 document.body.classList.add('dark-mode');
                 document.getElementById('toggleSlider').innerHTML = '🌙';
             }
+        }
+        
+        // Search history functions
+        function addToSearchHistory(query) {
+            if (!query || query.length < 2) return;
+            searchHistory = searchHistory.filter(item => item !== query);
+            searchHistory.unshift(query);
+            searchHistory = searchHistory.slice(0, 10);
+            localStorage.setItem('searchHistory', JSON.stringify(searchHistory));
+        }
+        
+        function showSearchHistory() {
+            const historyDiv = document.getElementById('search-history');
+            const input = document.getElementById('search-input');
+            const query = input.value.toLowerCase();
+            
+            let filteredHistory = searchHistory;
+            if (query) {
+                filteredHistory = searchHistory.filter(item => item.toLowerCase().includes(query));
+            }
+            
+            if (filteredHistory.length === 0) {
+                historyDiv.classList.add('hidden');
+                return;
+            }
+            
+            historyDiv.innerHTML = filteredHistory.map(item => 
+                `<div class="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm" onmousedown="selectSearchHistory('${item.replace(/'/g, '\\\'')}')">${item}</div>`
+            ).join('');
+            historyDiv.classList.remove('hidden');
+        }
+        
+        function hideSearchHistory() {
+            setTimeout(() => {
+                document.getElementById('search-history').classList.add('hidden');
+            }, 200);
+        }
+        
+        function selectSearchHistory(query) {
+            document.getElementById('search-input').value = query;
+            hideSearchHistory();
+            performSearch();
         }
         
         // Tab switching
@@ -366,6 +449,9 @@
                 resultsDiv.classList.add('hidden');
                 return;
             }
+            
+            addToSearchHistory(query);
+            hideSearchHistory();
             
             resultsDiv.innerHTML = '<div class="text-gray-500 p-4">Searching...</div>';
             resultsDiv.classList.remove('hidden');
@@ -526,7 +612,7 @@
             sendButton.textContent = 'Send';
         }
         
-        function addMessageToChat(role, content, sources = [], confidence = null) {
+        function addMessageToChat(role, content, sources = [], confidence = null, messageId = null) {
             const chatMessages = document.getElementById('chat-messages');
             
             if (chatMessages.children.length === 1 && chatMessages.children[0].classList.contains('text-center')) {
@@ -534,10 +620,18 @@
             }
             
             const messageDiv = document.createElement('div');
+            const msgId = messageId || Date.now().toString();
             messageDiv.className = `message ${role === 'user' ? 'user' : 'assistant'}`;
+            messageDiv.setAttribute('data-message-id', msgId);
             
             if (role === 'user') {
-                messageDiv.innerHTML = `${content}`;
+                messageDiv.innerHTML = `
+                    <div class="message-actions">
+                        <button onclick="editMessage('${msgId}')" class="text-xs px-1 py-0.5 bg-white bg-opacity-20 rounded hover:bg-opacity-40">✏️</button>
+                        <button onclick="deleteMessage('${msgId}')" class="text-xs px-1 py-0.5 bg-white bg-opacity-20 rounded hover:bg-opacity-40 ml-1">🗑️</button>
+                    </div>
+                    <div class="message-content">${content}</div>
+                `;
             } else {
                 const confidenceBar = confidence ? `
                     <div class="text-xs opacity-75 mb-2">
@@ -563,9 +657,14 @@
                 ` : '';
                 
                 messageDiv.innerHTML = `
+                    <div class="message-actions">
+                        <button onclick="deleteMessage('${msgId}')" class="text-xs px-1 py-0.5 bg-black bg-opacity-10 rounded hover:bg-opacity-20">🗑️</button>
+                    </div>
+                    <div class="message-content">
                         ${confidenceBar}
                         ${content}
                         ${sourcesHtml}
+                    </div>
                 `;
             }
             
@@ -637,6 +736,88 @@
                 document.getElementById('conversation-history').classList.add('hidden');
             } catch (error) {
                 console.error('Failed to load conversation:', error);
+            }
+        }
+        
+        // Export chat functionality
+        function exportChat() {
+            const chatMessages = document.getElementById('chat-messages');
+            if (!chatMessages.children.length || chatMessages.children[0].classList.contains('text-center')) {
+                alert('No conversation to export');
+                return;
+            }
+            
+            let markdown = '# Chat Conversation\n\n';
+            markdown += `**Date:** ${new Date().toLocaleString()}\n\n`;
+            
+            const messages = chatMessages.children;
+            for (let i = 0; i < messages.length; i++) {
+                const message = messages[i];
+                const role = message.classList.contains('user') ? 'User' : 'Assistant';
+                const content = message.querySelector('.message-content');
+                
+                if (content) {
+                    const text = content.textContent.trim();
+                    markdown += `## ${role}\n\n${text}\n\n`;
+                }
+            }
+            
+            const blob = new Blob([markdown], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `chat-${new Date().toISOString().split('T')[0]}.md`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // Message editing functions
+        function editMessage(messageId) {
+            const messageDiv = document.querySelector(`[data-message-id="${messageId}"]`);
+            if (!messageDiv || !messageDiv.classList.contains('user')) return;
+            
+            const contentDiv = messageDiv.querySelector('.message-content');
+            const currentText = contentDiv.textContent.trim();
+            
+            editingMessageId = messageId;
+            const input = document.getElementById('chat-input');
+            input.value = currentText;
+            input.focus();
+            
+            const sendButton = document.getElementById('send-button');
+            sendButton.textContent = 'Update';
+            sendButton.onclick = updateMessage;
+        }
+        
+        function updateMessage() {
+            if (!editingMessageId) return;
+            
+            const messageDiv = document.querySelector(`[data-message-id="${editingMessageId}"]`);
+            const input = document.getElementById('chat-input');
+            const newText = input.value.trim();
+            
+            if (newText && messageDiv) {
+                const contentDiv = messageDiv.querySelector('.message-content');
+                contentDiv.textContent = newText;
+            }
+            
+            cancelEdit();
+        }
+        
+        function cancelEdit() {
+            editingMessageId = null;
+            document.getElementById('chat-input').value = '';
+            const sendButton = document.getElementById('send-button');
+            sendButton.textContent = 'Send';
+            sendButton.onclick = sendChatMessage;
+        }
+        
+        function deleteMessage(messageId) {
+            if (confirm('Delete this message?')) {
+                const messageDiv = document.querySelector(`[data-message-id="${messageId}"]`);
+                if (messageDiv) {
+                    messageDiv.remove();
+                }
             }
         }
         
@@ -766,9 +947,80 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
         
+        // Keyboard shortcuts
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey || e.metaKey) {
+                    switch(e.key) {
+                        case '1':
+                            e.preventDefault();
+                            switchTab('search');
+                            break;
+                        case '2':
+                            e.preventDefault();
+                            switchTab('chat');
+                            break;
+                        case '3':
+                            e.preventDefault();
+                            switchTab('upload');
+                            break;
+                        case 'k':
+                            e.preventDefault();
+                            document.getElementById('search-input').focus();
+                            break;
+                        case 'Enter':
+                            if (document.activeElement.id === 'search-input') {
+                                e.preventDefault();
+                                performSearch();
+                            }
+                            break;
+                        case 'Escape':
+                            e.preventDefault();
+                            if (editingMessageId) {
+                                cancelEdit();
+                            }
+                            break;
+                    }
+                }
+                
+                if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    toggleKeyboardHelp();
+                }
+            });
+        }
+        
+        function toggleKeyboardHelp() {
+            let helpDiv = document.getElementById('keyboard-help');
+            if (!helpDiv) {
+                helpDiv = document.createElement('div');
+                helpDiv.id = 'keyboard-help';
+                helpDiv.className = 'keyboard-shortcuts';
+                helpDiv.innerHTML = `
+                    <div><strong>Keyboard Shortcuts:</strong></div>
+                    <div>Ctrl+1: Search Tab</div>
+                    <div>Ctrl+2: Chat Tab</div>
+                    <div>Ctrl+3: Upload Tab</div>
+                    <div>Ctrl+K: Focus Search</div>
+                    <div>?: Toggle Help</div>
+                    <div>Esc: Cancel Edit</div>
+                `;
+                document.body.appendChild(helpDiv);
+            }
+            
+            helpDiv.style.display = helpDiv.style.display === 'none' ? 'block' : 'none';
+            
+            if (helpDiv.style.display === 'block') {
+                setTimeout(() => {
+                    helpDiv.style.display = 'none';
+                }, 3000);
+            }
+        }
+        
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
-            loadDarkModePreference(); // Load saved dark mode preference
+            loadDarkModePreference();
+            setupKeyboardShortcuts();
             switchTab('search');
             loadDocuments();
         });
