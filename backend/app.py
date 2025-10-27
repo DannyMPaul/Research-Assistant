@@ -10,7 +10,7 @@ from routes.search import router as search_router
 from routes.vector_search import router as vector_search_router
 from routes.chat import router as chat_router
 
-app = FastAPI(title="Document Research Assistant", version="4.0.0")
+app = FastAPI(title="Document Research Assistant", version="4.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,7 +43,7 @@ async def serve_frontend():
 @app.get("/api")
 async def api_root():
     """API root endpoint providing information."""
-    return {"message": "Document Research Assistant API", "version": "4.0.0", "features": ["document_upload", "vector_search", "ai_chat"]}
+    return {"message": "Document Research Assistant API", "version": "4.2.0", "features": ["document_upload", "vector_search", "ai_chat", "document_organization", "message_reactions"]}
 
 @app.post("/api/upload")
 async def upload_document(file: UploadFile = File(...)):
@@ -79,4 +79,4 @@ async def list_documents():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8002)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

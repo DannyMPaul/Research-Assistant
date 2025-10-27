@@ -99,6 +99,23 @@
             color: #94a3b8 !important;
         }
 
+        /* Document thumbnail styles */
+        .doc-thumbnail {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            color: white;
+        }
+
+        .doc-thumbnail.pdf { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .doc-thumbnail.docx { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .doc-thumbnail.txt { background: linear-gradient(135deg, #10b981, #059669); }
+
         /* Chat message styles */
         .message {
             margin-bottom: 16px;
@@ -106,7 +123,6 @@
             border-radius: 12px;
             max-width: 80%;
             position: relative;
-            group: hover;
         }
 
         .message.user {
@@ -130,6 +146,7 @@
             background: rgba(0,0,0,0.1);
             border-radius: 4px;
             padding: 2px;
+            gap: 2px;
         }
 
         .message:hover .message-actions {
@@ -182,7 +199,7 @@
         <header class="text-center mb-8">
             <h1 class="text-3xl font-bold text-gray-900 mb-2">Document Research Assistant</h1>
             <p class="text-gray-600">Upload documents, search, and chat with AI</p>
-            <div class="text-sm text-gray-500 mt-2">Version 4.0.0 - AI-Powered Q&A with Llama</div>
+            <div class="text-sm text-gray-500 mt-2">Version 4.2.0 - AI-Powered Q&A with Organization</div>
         </header>
 
         <!-- Navigation Tabs -->
@@ -214,7 +231,34 @@
                         <button id="enhanced-search-btn" onclick="setSearchMode('enhanced')" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">
                             Smart Search + AI
                         </button>
+                        <button onclick="toggleSearchFilters()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">
+                            🔍 Filters
+                        </button>
                     </div>
+                    
+                    <div id="search-filters" class="hidden mb-3 p-3 bg-gray-100 rounded-lg space-y-2">
+                        <div class="grid grid-cols-3 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-600">File Type</label>
+                                <select id="filter-type" class="w-full text-sm px-2 py-1 border rounded">
+                                    <option value="">All Types</option>
+                                    <option value="pdf">PDF</option>
+                                    <option value="docx">DOCX</option>
+                                    <option value="txt">TXT</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-600">Min Size</label>
+                                <input type="number" id="filter-min-size" placeholder="KB" class="w-full text-sm px-2 py-1 border rounded">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-600">Max Size</label>
+                                <input type="number" id="filter-max-size" placeholder="KB" class="w-full text-sm px-2 py-1 border rounded">
+                            </div>
+                        </div>
+                        <button onclick="clearFilters()" class="text-xs text-blue-600 hover:underline">Clear Filters</button>
+                    </div>
+                    
                     <div class="flex space-x-2">
                         <div class="relative flex-1">
                             <input 
@@ -256,6 +300,9 @@
                         </button>
                         <button onclick="exportChat()" class="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
                             Export
+                        </button>
+                        <button onclick="showBookmarks()" class="px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700">
+                            ⭐ Bookmarks
                         </button>
                     </div>
                 </div>
@@ -309,21 +356,53 @@
             </div>
 
             <div class="w-full max-w-2xl mx-auto">
-                <h2 class="text-xl font-semibold mb-4">Your Documents</h2>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">Your Documents</h2>
+                    <button onclick="showCategoryManager()" class="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700">
+                        📁 Manage Categories
+                    </button>
+                </div>
+                
+                <div id="category-tabs" class="flex space-x-2 mb-4 overflow-x-auto pb-2">
+                    <button onclick="filterByCategory('all')" class="category-tab px-3 py-1 bg-blue-600 text-white text-sm rounded whitespace-nowrap">
+                        All
+                    </button>
+                </div>
+                
                 <div id="documents-list" class="space-y-2">
                     <div class="text-gray-500 text-center py-8">Loading documents...</div>
+                </div>
+            </div>
+            
+            <div id="category-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+                <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                    <h3 class="text-lg font-semibold mb-4">Manage Categories</h3>
+                    <div class="mb-4">
+                        <input type="text" id="new-category" placeholder="New category name" class="w-full px-3 py-2 border rounded">
+                        <button onclick="addCategory()" class="mt-2 w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                            Add Category
+                        </button>
+                    </div>
+                    <div id="category-list" class="space-y-2 mb-4"></div>
+                    <button onclick="closeCategoryManager()" class="w-full px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400">
+                        Close
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:8002';
+        const API_BASE = 'http://localhost:8000';
         let currentSearchMode = 'keyword';
         let currentConversationId = null;
         let chatEnabled = false;
         let searchHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
         let editingMessageId = null;
+        let documentCategories = JSON.parse(localStorage.getItem('documentCategories') || '{}');
+        let activeCategory = 'all';
+        let messageReactions = JSON.parse(localStorage.getItem('messageReactions') || '{}');
+        let bookmarkedMessages = JSON.parse(localStorage.getItem('bookmarkedMessages') || '[]');
         
         // Dark Mode Functions
         function toggleDarkMode() {
@@ -391,6 +470,41 @@
             document.getElementById('search-input').value = query;
             hideSearchHistory();
             performSearch();
+        }
+        
+        // Search filter functions
+        function toggleSearchFilters() {
+            const filtersDiv = document.getElementById('search-filters');
+            filtersDiv.classList.toggle('hidden');
+        }
+        
+        function clearFilters() {
+            document.getElementById('filter-type').value = '';
+            document.getElementById('filter-min-size').value = '';
+            document.getElementById('filter-max-size').value = '';
+        }
+        
+        function getActiveFilters() {
+            return {
+                type: document.getElementById('filter-type').value,
+                minSize: parseInt(document.getElementById('filter-min-size').value) || 0,
+                maxSize: parseInt(document.getElementById('filter-max-size').value) || Infinity
+            };
+        }
+        
+        function applyFiltersToResults(documents) {
+            const filters = getActiveFilters();
+            
+            return documents.filter(doc => {
+                const ext = doc.filename.split('.').pop().toLowerCase();
+                const sizeKB = doc.size / 1024;
+                
+                if (filters.type && ext !== filters.type) return false;
+                if (sizeKB < filters.minSize) return false;
+                if (sizeKB > filters.maxSize) return false;
+                
+                return true;
+            });
         }
         
         // Tab switching
@@ -539,14 +653,25 @@
         }
         
         function displayKeywordResults(data) {
+            const resultsDiv = document.getElementById('search-results');
+            
             if (data.documents.length === 0) {
-                return '<div class="text-gray-500 p-4">No keyword matches found</div>';
+                resultsDiv.innerHTML = '<div class="text-gray-500 p-4">No keyword matches found</div>';
+                return;
             }
             
-            return `
+            const filteredDocs = applyFiltersToResults(data.documents.map(doc => ({
+                filename: doc.filename,
+                size: 1024
+            })));
+            
+            const filteredNames = new Set(filteredDocs.map(d => d.filename));
+            const filtered = data.documents.filter(doc => filteredNames.has(doc.filename));
+            
+            resultsDiv.innerHTML = `
                 <div class="bg-white border rounded-lg p-4">
-                    <h3 class="font-semibold mb-3">Keyword Results (${data.total_documents} documents)</h3>
-                    ${data.documents.map(doc => `
+                    <h3 class="font-semibold mb-3">Keyword Results (${filtered.length} documents)</h3>
+                    ${filtered.map(doc => `
                         <div class="mb-4 last:mb-0">
                             <h4 class="font-medium text-blue-600">${doc.filename}</h4>
                             <p class="text-sm text-gray-600">${doc.matches} matches found</p>
@@ -627,10 +752,13 @@
             if (role === 'user') {
                 messageDiv.innerHTML = `
                     <div class="message-actions">
+                        <button onclick="toggleBookmark('${msgId}')" class="text-xs px-1 py-0.5 bg-white bg-opacity-20 rounded hover:bg-opacity-40">${bookmarkedMessages.includes(msgId) ? '⭐' : '☆'}</button>
                         <button onclick="editMessage('${msgId}')" class="text-xs px-1 py-0.5 bg-white bg-opacity-20 rounded hover:bg-opacity-40">✏️</button>
                         <button onclick="deleteMessage('${msgId}')" class="text-xs px-1 py-0.5 bg-white bg-opacity-20 rounded hover:bg-opacity-40 ml-1">🗑️</button>
                     </div>
                     <div class="message-content">${content}</div>
+                    <div class="message-reactions mt-2 flex gap-1">${renderReactions(msgId)}</div>
+                    <button onclick="showReactionPicker('${msgId}')" class="text-xs mt-1 opacity-50 hover:opacity-100">React</button>
                 `;
             } else {
                 const confidenceBar = confidence ? `
@@ -658,6 +786,7 @@
                 
                 messageDiv.innerHTML = `
                     <div class="message-actions">
+                        <button onclick="toggleBookmark('${msgId}')" class="text-xs px-1 py-0.5 bg-black bg-opacity-10 rounded hover:bg-opacity-20">${bookmarkedMessages.includes(msgId) ? '⭐' : '☆'}</button>
                         <button onclick="deleteMessage('${msgId}')" class="text-xs px-1 py-0.5 bg-black bg-opacity-10 rounded hover:bg-opacity-20">🗑️</button>
                     </div>
                     <div class="message-content">
@@ -665,6 +794,8 @@
                         ${content}
                         ${sourcesHtml}
                     </div>
+                    <div class="message-reactions mt-2 flex gap-1">${renderReactions(msgId)}</div>
+                    <button onclick="showReactionPicker('${msgId}')" class="text-xs mt-1 opacity-50 hover:opacity-100">React</button>
                 `;
             }
             
@@ -818,7 +949,112 @@
                 if (messageDiv) {
                     messageDiv.remove();
                 }
+                
+                const bookmarkIndex = bookmarkedMessages.indexOf(messageId);
+                if (bookmarkIndex > -1) {
+                    bookmarkedMessages.splice(bookmarkIndex, 1);
+                    localStorage.setItem('bookmarkedMessages', JSON.stringify(bookmarkedMessages));
+                }
+                
+                delete messageReactions[messageId];
+                localStorage.setItem('messageReactions', JSON.stringify(messageReactions));
             }
+        }
+        
+        // Reaction and bookmark functions
+        function renderReactions(messageId) {
+            const reactions = messageReactions[messageId] || {};
+            return Object.entries(reactions)
+                .map(([emoji, count]) => `<span class="text-xs bg-gray-200 px-2 py-1 rounded">${emoji} ${count}</span>`)
+                .join('');
+        }
+        
+        function showReactionPicker(messageId) {
+            const emojis = ['👍', '❤️', '😊', '🎉', '🤔', '👏'];
+            const picker = document.createElement('div');
+            picker.className = 'fixed bg-white border rounded shadow-lg p-2 z-50';
+            picker.style.left = '50%';
+            picker.style.top = '50%';
+            picker.style.transform = 'translate(-50%, -50%)';
+            picker.innerHTML = emojis.map(emoji => 
+                `<button onclick="addReaction('${messageId}', '${emoji}')" class="text-2xl px-2 hover:bg-gray-100 rounded">${emoji}</button>`
+            ).join('');
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = '✕';
+            closeBtn.className = 'absolute top-0 right-0 text-xs px-2 py-1';
+            closeBtn.onclick = () => picker.remove();
+            picker.appendChild(closeBtn);
+            
+            document.body.appendChild(picker);
+            setTimeout(() => picker.addEventListener('click', (e) => e.stopPropagation()), 0);
+            document.addEventListener('click', () => picker.remove(), { once: true });
+        }
+        
+        function addReaction(messageId, emoji) {
+            if (!messageReactions[messageId]) {
+                messageReactions[messageId] = {};
+            }
+            messageReactions[messageId][emoji] = (messageReactions[messageId][emoji] || 0) + 1;
+            localStorage.setItem('messageReactions', JSON.stringify(messageReactions));
+            
+            const messageDiv = document.querySelector(`[data-message-id="${messageId}"]`);
+            if (messageDiv) {
+                const reactionsDiv = messageDiv.querySelector('.message-reactions');
+                if (reactionsDiv) {
+                    reactionsDiv.innerHTML = renderReactions(messageId);
+                }
+            }
+            
+            document.querySelectorAll('.fixed').forEach(el => {
+                if (el.textContent.includes('👍')) el.remove();
+            });
+        }
+        
+        function toggleBookmark(messageId) {
+            const index = bookmarkedMessages.indexOf(messageId);
+            if (index > -1) {
+                bookmarkedMessages.splice(index, 1);
+            } else {
+                bookmarkedMessages.push(messageId);
+            }
+            localStorage.setItem('bookmarkedMessages', JSON.stringify(bookmarkedMessages));
+            
+            const messageDiv = document.querySelector(`[data-message-id="${messageId}"]`);
+            if (messageDiv) {
+                const bookmarkBtn = messageDiv.querySelector('.message-actions button');
+                if (bookmarkBtn) {
+                    bookmarkBtn.textContent = bookmarkedMessages.includes(messageId) ? '⭐' : '☆';
+                }
+            }
+        }
+        
+        function showBookmarks() {
+            const chatMessages = document.getElementById('chat-messages');
+            const bookmarked = [];
+            
+            chatMessages.querySelectorAll('.message').forEach(msg => {
+                const msgId = msg.getAttribute('data-message-id');
+                if (bookmarkedMessages.includes(msgId)) {
+                    bookmarked.push(msg.cloneNode(true));
+                }
+            });
+            
+            if (bookmarked.length === 0) {
+                alert('No bookmarked messages');
+                return;
+            }
+            
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-96 overflow-y-auto">
+                    <h3 class="text-lg font-semibold mb-4">Bookmarked Messages</h3>
+                    <div class="space-y-4">${bookmarked.map(m => m.outerHTML).join('')}</div>
+                    <button onclick="this.closest('.fixed').remove()" class="mt-4 w-full px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Close</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
         }
         
         // Upload functionality
@@ -905,12 +1141,38 @@
                 if (data.documents.length === 0) {
                     documentsList.innerHTML = '<div class="text-gray-500 text-center py-8">No documents uploaded yet</div>';
                 } else {
-                    documentsList.innerHTML = data.documents.map(doc => `
+                    updateCategoryTabs();
+                    
+                    let filteredDocs = data.documents;
+                    if (activeCategory !== 'all') {
+                        const categoryDocs = Object.keys(documentCategories)
+                            .filter(key => documentCategories[key] === activeCategory);
+                        filteredDocs = data.documents.filter(doc => categoryDocs.includes(doc.file_id));
+                    }
+                    
+                    documentsList.innerHTML = filteredDocs.map(doc => {
+                        const ext = doc.filename.split('.').pop().toLowerCase();
+                        const icon = ext === 'pdf' ? '📄' : ext === 'docx' ? '📝' : '📃';
+                        const category = documentCategories[doc.file_id] || 'uncategorized';
+                        
+                        return `
                         <div class="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
                             <div class="flex justify-between items-start">
-                                <div>
-                                    <h3 class="font-medium text-gray-900">${doc.filename}</h3>
-                                    <p class="text-sm text-gray-500">${formatFileSize(doc.size)}</p>
+                                <div class="flex items-center space-x-3 flex-1">
+                                    <div class="doc-thumbnail ${ext}">
+                                        ${icon}
+                                    </div>
+                                    <div class="flex-1">
+                                        <h3 class="font-medium text-gray-900">${doc.filename}</h3>
+                                        <div class="flex items-center space-x-2">
+                                            <p class="text-sm text-gray-500">${formatFileSize(doc.size)}</p>
+                                            <select onchange="assignCategory('${doc.file_id}', this.value)" 
+                                                    class="text-xs px-2 py-1 border rounded bg-white">
+                                                <option value="uncategorized" ${category === 'uncategorized' ? 'selected' : ''}>No Category</option>
+                                                ${getCategoryOptions(category)}
+                                            </select>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="flex space-x-2">
                                     <button onclick="embedDocument('${doc.file_id}')" class="text-purple-600 hover:text-purple-800 text-sm">
@@ -919,11 +1181,105 @@
                                 </div>
                             </div>
                         </div>
-                    `).join('');
+                    `}).join('');
                 }
             } catch (error) {
                 document.getElementById('documents-list').innerHTML = '<div class="text-red-500 text-center py-8">Error loading documents</div>';
             }
+        }
+        
+        // Category management functions
+        function getCategoryOptions(selectedCategory) {
+            const categories = [...new Set(Object.values(documentCategories))];
+            return categories
+                .filter(cat => cat !== 'uncategorized')
+                .map(cat => `<option value="${cat}" ${cat === selectedCategory ? 'selected' : ''}>${cat}</option>`)
+                .join('');
+        }
+        
+        function updateCategoryTabs() {
+            const categories = ['all', ...new Set(Object.values(documentCategories).filter(c => c !== 'uncategorized'))];
+            const tabsDiv = document.getElementById('category-tabs');
+            
+            tabsDiv.innerHTML = categories.map(cat => `
+                <button onclick="filterByCategory('${cat}')" 
+                        class="category-tab px-3 py-1 ${activeCategory === cat ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'} text-sm rounded whitespace-nowrap hover:bg-blue-500 hover:text-white">
+                    ${cat.charAt(0).toUpperCase() + cat.slice(1)}
+                </button>
+            `).join('');
+        }
+        
+        function filterByCategory(category) {
+            activeCategory = category;
+            loadDocuments();
+        }
+        
+        function assignCategory(fileId, category) {
+            if (category === 'uncategorized') {
+                delete documentCategories[fileId];
+            } else {
+                documentCategories[fileId] = category;
+            }
+            localStorage.setItem('documentCategories', JSON.stringify(documentCategories));
+            loadDocuments();
+        }
+        
+        function showCategoryManager() {
+            document.getElementById('category-modal').classList.remove('hidden');
+            updateCategoryList();
+        }
+        
+        function closeCategoryManager() {
+            document.getElementById('category-modal').classList.add('hidden');
+        }
+        
+        function updateCategoryList() {
+            const categories = [...new Set(Object.values(documentCategories).filter(c => c !== 'uncategorized'))];
+            const listDiv = document.getElementById('category-list');
+            
+            if (categories.length === 0) {
+                listDiv.innerHTML = '<div class="text-gray-500 text-sm">No categories yet</div>';
+            } else {
+                listDiv.innerHTML = categories.map(cat => `
+                    <div class="flex justify-between items-center p-2 bg-gray-100 rounded">
+                        <span class="text-sm">${cat}</span>
+                        <button onclick="deleteCategory('${cat}')" class="text-red-600 hover:text-red-800 text-xs">
+                            Delete
+                        </button>
+                    </div>
+                `).join('');
+            }
+        }
+        
+        function addCategory() {
+            const input = document.getElementById('new-category');
+            const categoryName = input.value.trim().toLowerCase();
+            
+            if (!categoryName) return;
+            
+            const categories = new Set(Object.values(documentCategories));
+            if (categories.has(categoryName)) {
+                alert('Category already exists');
+                return;
+            }
+            
+            input.value = '';
+            updateCategoryList();
+            loadDocuments();
+        }
+        
+        function deleteCategory(categoryName) {
+            if (!confirm(`Delete category "${categoryName}"?`)) return;
+            
+            Object.keys(documentCategories).forEach(key => {
+                if (documentCategories[key] === categoryName) {
+                    delete documentCategories[key];
+                }
+            });
+            
+            localStorage.setItem('documentCategories', JSON.stringify(documentCategories));
+            updateCategoryList();
+            loadDocuments();
         }
         
         async function embedDocument(fileId) {
