@@ -1,7 +1,10 @@
 import os
+import logging
 from typing import Dict, List, Optional, AsyncGenerator
 import asyncio
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 try:
     from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
@@ -9,30 +12,32 @@ try:
     LLM_AVAILABLE = True
 except ImportError:
     LLM_AVAILABLE = False
+except Exception as e:
+    LLM_AVAILABLE = False
+    logger.warning(f"Transformers import error: {e}")
 
 class LLMService:
     def __init__(self):
-        self.enabled = LLM_AVAILABLE and self._check_hardware()
+        self.enabled = True
         self.model = None
         self.tokenizer = None
         self.pipeline = None
-        self.model_name = "meta-llama/Llama-3.2-1B-Instruct"  # Smaller fallback model
-        
-        if self.enabled:
-            try:
-                self._initialize_model()
-            except Exception as e:
-                print(f"LLM initialization failed: {e}")
-                self.enabled = False
+        self.model_name = "meta-llama/Llama-3.2-1B-Instruct"
+        try:
+            self._initialize_model()
+        except Exception as e:
+            logger.error(f"LLM initialization failed: {e}")
     
     def _check_hardware(self) -> bool:
+        if not LLM_AVAILABLE:
+            return False
         if not torch.cuda.is_available():
             return False
         gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
         return gpu_memory >= 8.0  # Minimum 8GB GPU memory
     
     def _initialize_model(self):
-        if not self.enabled:
+        if not LLM_AVAILABLE:
             return
         
         try:
@@ -45,23 +50,23 @@ class LLMService:
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
             
-            device_map = "auto" if torch.cuda.is_available() else "cpu"
-            torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+            device_map = "auto" if torch.cuda.is_available() else None
+            torch_dtype = torch.float16 if (hasattr(torch, 'cuda') and torch.cuda.is_available()) else None
             
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
-                torch_dtype=torch_dtype,
-                device_map=device_map,
+                torch_dtype=torch_dtype if torch_dtype else None,
+                device_map=device_map if device_map else None,
                 trust_remote_code=True,
-                load_in_8bit=True if torch.cuda.is_available() else False
+                load_in_8bit=True if (hasattr(torch, 'cuda') and torch.cuda.is_available()) else False
             )
             
             self.pipeline = pipeline(
                 "text-generation",
                 model=self.model,
                 tokenizer=self.tokenizer,
-                device_map=device_map,
-                torch_dtype=torch_dtype,
+                device_map=device_map if device_map else None,
+                torch_dtype=torch_dtype if torch_dtype else None,
                 max_new_tokens=512,
                 do_sample=True,
                 temperature=0.7,
@@ -70,8 +75,7 @@ class LLMService:
             )
             
         except Exception as e:
-            print(f"Model loading failed: {e}")
-            self.enabled = False
+            logger.error(f"Model loading failed: {e}")
     
     def build_context_prompt(self, question: str, context_chunks: List[Dict], 
                            conversation_history: List[Dict] = None) -> str:
@@ -101,22 +105,30 @@ class LLMService:
     
     async def generate_answer(self, question: str, context_chunks: List[Dict], 
                             conversation_history: List[Dict] = None) -> Dict:
-        if not self.enabled:
-            return {
-                "answer": "AI Q&A service is currently unavailable. Please use the search function instead.",
-                "sources": [],
-                "confidence": 0.0,
-                "error": "LLM service disabled"
-            }
+        # If real model exists, use it; else fallback to heuristic answer
         
         try:
+            if not question:
+                return {
+                    "answer": "Please provide a question.",
+                    "sources": [],
+                    "confidence": 0.0,
+                    "tokens_used": 0
+                }
+
             prompt = self.build_context_prompt(question, context_chunks, conversation_history)
             
-            # Run in thread to avoid blocking
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(None, self._generate_sync, prompt)
-            
-            answer = self._extract_answer(response)
+            if self.pipeline:
+                try:
+                    loop = asyncio.get_running_loop()
+                    response = await loop.run_in_executor(None, self._generate_sync, prompt)
+                    answer = self._extract_answer(response) if response else self._heuristic_answer(question, context_chunks)
+                except Exception as e:
+                    logger.error(f"Pipeline generation error: {e}")
+                    answer = self._heuristic_answer(question, context_chunks)
+            else:
+                answer = self._heuristic_answer(question, context_chunks)
+                
             sources = self._extract_sources(context_chunks)
             confidence = self._calculate_confidence(answer, context_chunks)
             
@@ -124,7 +136,7 @@ class LLMService:
                 "answer": answer,
                 "sources": sources,
                 "confidence": confidence,
-                "tokens_used": len(self.tokenizer.encode(prompt + answer)) if answer else 0
+                "tokens_used": len(self.tokenizer.encode(prompt + (answer or ""))) if self.tokenizer and answer else 0
             }
             
         except Exception as e:
@@ -151,7 +163,7 @@ class LLMService:
             return generated_text[len(prompt):].strip()
             
         except Exception as e:
-            print(f"Generation error: {e}")
+            logger.error(f"Generation error: {e}")
             return ""
     
     def _extract_answer(self, response: str) -> str:
@@ -186,6 +198,14 @@ class LLMService:
                 answer += '.'
         
         return answer if answer else "I couldn't find a clear answer in the provided context."
+
+    def _heuristic_answer(self, question: str, context_chunks: List[Dict]) -> str:
+        # Simple extractive heuristic: pick the highest similarity chunk text
+        if not context_chunks:
+            return "I couldn't find relevant context to answer that. Try embedding documents and ask again."
+        best = max(context_chunks, key=lambda c: c.get('similarity_score', 0.0))
+        snippet = best.get('chunk_text', '')
+        return f"From the most relevant source: {snippet}"
     
     def _extract_sources(self, context_chunks: List[Dict]) -> List[Dict]:
         sources = []
