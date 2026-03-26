@@ -1,47 +1,122 @@
-# Document Research Assistant
+# Research Assistant
 
-AI-powered document analysis platform with intelligent Q&A capabilities using Large Language Models.
+A sophisticated, locally-run AI-powered research assistant to help you analyze and chat with your documents.
 
-## Version 4.2.0 - Enhanced Organization & Interaction
+## Table of Contents
 
-### Features
+- [Overview](#overview)
+- [Features](#features)
+- [How It Works](#how-it-works)
+- [Technology Stack](#technology-stack)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Configuration](#configuration)
+  - [Running the Application](#running-the-application)
+- [Usage](#usage)
+- [Contributing](#contributing)
+- [License](#license)
 
-- **AI Chat**: Ask questions about your documents with contextual answers
-- **Smart Search**: Keyword, semantic, and AI-enhanced search modes with advanced filters
-- **Document Organization**: Category-based document management with visual thumbnails
-- **Interactive Messages**: React to messages with emojis and bookmark important conversations
-- **Document Support**: PDF, DOCX, TXT with automatic processing
-- **Query History**: Auto-saved search suggestions
-- **Export**: Save conversations as markdown
-- **Keyboard Shortcuts**: Full navigation support
+## Overview
 
-## Quick Start
+This project is a web-based application that allows you to upload documents (PDFs, DOCX, and TXT files) and interact with them through a chat interface. It's designed to be a powerful tool for researchers, students, and anyone who needs to quickly find information within a collection of documents.
 
-```bash
-cd backend
-pip install -r requirements.txt
-python app.py
-```
+Unlike other document chat applications that rely on cloud services, this Research Assistant runs entirely on your local machine, ensuring your data remains private and secure. It uses a combination of traditional keyword search, modern semantic search, and a powerful local large language model (LLM) to provide accurate and context-aware answers to your questions.
 
-Access at http://localhost:8000
+## Features
+
+- **Local First**: Everything runs on your machine. No data is sent to the cloud.
+- **Multiple Search Methods**:
+  - **Keyword Search**: The classic way to find exact words or phrases.
+  - **Semantic Search**: Finds relevant passages based on meaning, not just keywords.
+  - **AI-Enhanced Search**: Uses a large language model to understand your questions and find the best answers.
+- **Document Management**:
+  - Upload and manage your documents.
+  - View document details and previews.
+- **Conversational Interface**:
+  - Chat with your documents in natural language.
+  - Conversations are saved automatically.
+- **Advanced Indexing**:
+  - Creates a hierarchical index of your documents for faster and more accurate retrieval.
+- **User-Friendly Interface**:
+  - Dark mode and a clean, modern design.
+  - Keyboard shortcuts for power users.
+
+## How It Works
+
+The application is built with a Python backend and a vanilla JavaScript frontend.
+
+1.  **Document Upload**: When you upload a document, the backend extracts the text and splits it into smaller chunks.
+2.  **Indexing**: These chunks are then indexed in two ways:
+    - A traditional keyword index.
+    - A vector index using sentence-transformers and FAISS for semantic search.
+3.  **Chat**: When you ask a question, the application uses a multi-step process to find the answer:
+    - It first tries to find relevant chunks using semantic search.
+    - If that fails, it falls back to keyword search.
+    - The most relevant chunks are then passed to a local large language model (Llama-3.2-1B-Instruct) along with your question.
+    - The LLM generates an answer based on the provided context.
+
+## Technology Stack
+
+### Backend
+
+- **Framework**: FastAPI
+- **AI/ML**:
+  - **LLM**: Llama-3.2-1B-Instruct
+  - **Embeddings**: `sentence-transformers`
+  - **Vector Store**: FAISS
+- **Document Processing**: PyMuPDF, python-docx
+
+### Frontend
+
+- **Framework**: Vanilla JavaScript
+- **Styling**: Tailwind CSS
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11+
+- 4GB+ RAM (8GB+ recommended)
+- A GPU with CUDA support is recommended for the best performance, but the application will fall back to CPU if a GPU is not available.
+
+### Installation
+
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/your-username/research-assistant.git
+    cd research-assistant
+    ```
+2.  Install the backend dependencies:
+    ```bash
+    cd backend
+    pip install -r requirements.txt
+    ```
+
+### Configuration
+
+You can configure the application by creating a `.env` file in the `backend` directory. See the `.env.example` file for a list of available options.
+
+### Running the Application
+
+1.  Start the backend server:
+    ```bash
+    python backend/app.py
+    ```
+2.  Open your browser and navigate to `http://localhost:8000`.
 
 ## Usage
 
-1. **Upload**: Drag documents to "Manage Documents" → "Process for AI" → Organize with categories
-2. **Search**: Use different search modes with filters (file type, size) in "Search Documents"
-3. **Chat**: Ask questions → React with emojis → Bookmark important messages
-4. **Shortcuts**: Ctrl+1/2/3 for tabs, Ctrl+K for search, ? for help## Tech Stack
+Once the application is running, you can start uploading documents and asking questions. The interface is designed to be intuitive, but here are a few tips:
 
-- **Backend**: FastAPI, Python 3.11+
-- **AI**: Llama-3.2-1B-Instruct, sentence-transformers, FAISS
-- **Frontend**: Vanilla JS, Tailwind CSS
+- Use the tabs at the top to switch between the document manager, search, and chat.
+- Use the search bar to quickly find documents or start a new chat.
+- Use the keyboard shortcuts (`?` for help) to speed up your workflow.
 
-## Requirements
+## Contributing
 
-- Python 3.11+
-- 8GB+ GPU (recommended) or CPU fallback
-- 4GB+ RAM
+Contributions are welcome! Please open an issue or submit a pull request if you have any ideas or suggestions.
 
 ## License
 
-MIT License
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
